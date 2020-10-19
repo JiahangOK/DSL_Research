@@ -1,5 +1,7 @@
 # Practical GUI Testing of Android Applications via Model Abstraction and Reﬁnement (ICSE 2019)
 
+[TOC]
+
 本篇文章介绍了一种基于模型的全自动安卓应用的测试方法，该方法可以利用测试过程中的运行时间，动态地去优化模型，比其他测试方法更高效、更准确，作者利用这个方法实现了一个测试工具，叫做“APE”，该工具在测试覆盖和特殊故障检测方面都表现出了最好的安卓GUI测试性能。
 
 ## 1 引言
@@ -84,7 +86,7 @@
 1. 获取了应用软件当前的GUI树
 2. 识别已经存在的状态，并创建新的状态
 3. 选择一个模型动作，确定和app交互的GUI动作
-<div align="center"><img src="imgs/f3.png" width="500"></img></div>
+<div align="center"><img src="imgs/f3.png" width="600"></img></div>
 <div align="center">图 2-2 基于模型的GUI测试流程图</div>
 
 基于模型的GUI测试工具的目的在于发现更多的部件，并在已经发现的部件中测试他们的交互过程，现在的安卓应用界面中部件数量很庞大，需要将一些相同的模型动作进行抽象，以减少搜索的空间。然而，判断两个部件是否等价是不容易的。全属性路径中通常包含不相关的信息，很难发现两个语义上等价的部件。比如图2-1中的$w_i^1$和$w_j^2$都是一个表格类型的TextView，然而在表2-1中对应的全属性路径是不同的，因此，单纯靠全属性路径判断等价部件会使模型规模越来越大。
@@ -111,14 +113,79 @@
 再比如，AMOLA有五种静态抽象的方法，其中的C-Lv5准则同时考虑了index和text属性，因此，图2-1中的(a)和(b)属于两种不同的状态。
 
 <div align="center">表 2-2 不同方法的缩减属性路径</div>
-<div align="center"><img src="imgs/f4.png" width="800"></img></div>
+<div align="center"><img src="imgs/f4.png" width="900"></img></div>
 
 在一个状态机图中，圆形表示模型的某种状态，圆形之间的线表示状态之间转移的模型动作，如下图所示。
 
-<div align="center"><img src="imgs/f5.png" width="500"></img></div>
+<div align="center"><img src="imgs/f5.png" width="600"></img></div>
 <div align="center">图 2-3 模型的状态机图（部分）</div>
 
 粗粒度的抽象一定程度上可以避免“状态爆炸”，而细粒度的抽象可以准确描述运行状态，因此，评价模型抽象的标准就是这个抽象方法是否能均衡模型大小和模型精度，实现最佳的GUI测试效果。在上图中，STOAT是粗粒度的抽象，即使是在相同的GUI中，执行的同一个动作会进入不同的页面，AMOLA(C-Lv4)却可以在同一个GUI中，区分出word,excel和powerpoint，而不同GUI也会出现问题。最合适的其实是(c)，对于ListView的子部件抽象的时候只保留了text属性，然而，目前已有的工具无一可以做到这种抽象，而本文提出的动态抽象的方法做到了。
 
 ## 3 本文的方法介绍
 
+### 3.1 模型
+
+**定义4：模型**
+在APE中，模型$M$用一个元组$(\mathcal{S},\mathcal{A},\mathcal{T},\mathcal{L})$表示，其中，
+- $\mathcal{S}$代表状态的集合, $\mathcal{S}$中的元素则是一个状态，也就是一个属性路径的集合。
+- $\mathcal{A}$代表模型动作的集合，每个模型动作$\pi\in\mathcal{A}$是一个属性路径。$\mathcal{A}$和$\mathcal{S}$的关系是$\mathcal{A}=\cup_{S\in\mathcal{S}}S$。
+- $\mathcal{T}$代表状态转移的集合（$\mathcal{S}\times\mathcal{A}\times\mathcal{S}$），每个转移$(S,\pi,S')$都有一个源状态$S$，和一个目标状态$S'$，转移的标签就是一个模型动作$\pi$。
+- $\mathcal{L}$是抽象函数，将全属性路径$\sigma$缩减为一个属性路径$\pi$，即$\mathcal{L}(\sigma)=\pi$.
+
+APE在每次迭代的过程中，记录了每次的GUI转移，每次转移是一个$(T,\sigma,T')$元组。为了更方便的表示，我们可以由$\mathcal{L}$派生两个变体函数，$\mathbb{L}_\mathcal{L}$和$\mathfrak{L}_\mathcal{L}$，分别用来处理GUI树和GUI转移。
+
+给定一个GUI树$T$，$\mathbb{L}_\mathcal{L}$函数可以用来寻找其对应的模型状态$S$，
+
+$$
+S=\mathbb{L}_\mathcal{L}(T)=\{\pi|\pi=\mathcal{L}(\sigma)\land\sigma\in T\}
+$$
+
+给定一个GUI转移$(T,\sigma,T')$，$\mathfrak{L}_\mathcal{L}$函数可以用来寻找其对应的模型转移$(S,\pi,S')$，
+
+$$
+(S,\pi,S')=\mathfrak{L}_\mathcal{L}((T,\sigma,T'))=(\mathbb{L}_\mathcal{L}(T),\mathcal{L}(\sigma),\mathbb{L}_\mathcal{L}(T'))
+$$
+
+算法1中描述了基于模型的测试过程，模型$M$起始是空的，每次迭代都存在一个模型状态$S$和一个模型动作$\pi$,UptAndOptModel函数会对模型进行优化，SelectAndSimulateAction函数会决定下一步的模型动作。
+<div align="center"><img src="imgs/f6.png" width="600"></img></div>
+<div align="center">图 2-4 模型构造</div>
+
+### 3.2 动态抽象函数
+
+动态抽象是APE的一个亮点，而动态地去对模型进行抽象是不容易实现的，他应该具有以下几个性质：
+- 自适应的
+抽象粒度随着测试过程在不断调整，代码也是动态改变的。
+- 可生成的
+测试过程中会发现新的GUI树和一些属性路径，在模型中生成新的状态和转移。
+- 可解释的
+用户可以结合一些关键的规则，改善动态抽象。
+
+APE的模型抽象是通过决策树实现的。给定一个全属性路径$\sigma$，决策树可以决定缩减的规则是如何的。决策树是一个有根树，每个节点就是一个缩减器$R$，每条边（分支）用一个属性路径$\pi$标识，$\pi$被称为这个分支的选择器。
+
+给定一个全属性路径，如果某个分支可以将这个路径缩减为属性路径$\pi$，那么称这个分支选择了这个全属性路径；给定一个GUI树，如果某个分支可以将树中一个全属性的集合缩减为属性路径$\pi$，那么称这个分支选择了这个全属性集合。
+
+给定一个全属性路径$\sigma$，从决策树的根节点开始，看这个节点是否存在某些分支可以选择这个全属性路径，如果存在，则转移到这个分支对应的子节点$n$，然后递归的去查找。如果找不到任何一个选择器了，那么缩减器n就作为消减$\sigma$的输出，n被称为输出节点。
+
+决策树需要为$\sigma$选择一个且仅有一个缩减器，为了保证这个性质，我们需要设计一个方法，使任何全属性路径最多只能被一个分支选择。
+
+一个缩减器是一些原始缩减器的集合，我们定义了两种原始缩减器-本地缩减器和祖先缩减器。
+
+**定义5：本地缩减器**
+用$A$表示属性键的集合。给定一个全属性路径$\sigma=<a_1,a_2,...,a_n>$，本地缩减器$R_A$去掉了$a_1,a_2,...,a_{n-1}$，只保留了$a_n$中$A$集合对应的属性。
+
+$$
+R_A(\sigma)=<\{(k,v)|(k,v) \in a_n \land k \in A\}>
+$$
+
+**定义6：祖先缩减器**
+给定一个全属性路径$\sigma=<a_1,a_2,...,a_n>$，祖先缩减器$R_p(\sigma)=\mathcal{L}(<a_1,a_2,...,a_{}n-1>)$，祖先缩减器重用了属性路径$<a_1,a_2,...,a_{n-1}>$的输出，不保留$a_n$。
+
+$$
+R_p(\sigma)=\mathcal{L}(<a_1,a_2,...,a_{n-1}>)\oplus R_\empty(\sigma)
+$$
+
+$\oplus$代表序列的连接。
+
+**定义7：缩减器聚合**
+给定一个全属性路径$\sigma=<a_1,a_2,...,a_n>$，两个缩减器$R$和$R'$，假设$R(\sigma)=<b_m,b_{m+1},...,b_n>$,$R'(\sigma)=<c_k,c_{k+1},...,c_n>$，且$m\leq k$。缩减器聚合$R \Join R'(\sigma)$
