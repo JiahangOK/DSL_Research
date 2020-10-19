@@ -188,4 +188,4 @@ $$
 $\oplus$代表序列的连接。
 
 **定义7：缩减器聚合**
-给定一个全属性路径$\sigma=<a_1,a_2,...,a_n>$，两个缩减器$R$和$R'$，假设$R(\sigma)=<b_m,b_{m+1},...,b_n>$,$R'(\sigma)=<c_k,c_{k+1},...,c_n>$，且$m\leq k$。缩减器聚合$R \Join R'(\sigma)$
+给定一个全属性路径$\sigma=<a_1,a_2,...,a_n>$，两个缩减器$R$和$R'$，假设$R(\sigma)=<b_m,b_{m+1},...,b_n>$,$R'(\sigma)=<c_k,c_{k+1},...,c_n>$，且$m\leq k$。缩减器聚合$R \bowtie R'(\sigma)$
